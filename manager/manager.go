@@ -28,6 +28,7 @@ type (
 		ReadMessage(interface{}) (int, error)
 		SendMessage([]byte) error
 		Close()
+		Ping() error
 	}
 
 	Message struct {
@@ -41,7 +42,7 @@ type (
 type (
 	//Manager
 	Manager struct {
-		ClientManager
+		*ClientManager
 	}
 
 	//ClientManager
@@ -52,11 +53,37 @@ type (
 		unregister    chan Client
 		mux           sync.RWMutex
 		SendErrHandle func(error)
+		PingErrHandle func(error)
 	}
 )
 
-func (m *Manager) Start(done chan struct{}) {
+//NewMessage
+func NewMessage(sender, recipient string, content []byte) Message {
 
+	return Message{
+		sender, recipient, content,
+	}
+}
+
+//NewManager
+func NewManager() *Manager {
+	return &Manager{NewClientManager()}
+}
+
+//NewClientManager
+func NewClientManager() *ClientManager {
+	return &ClientManager{
+		clients:    make(map[string]Client),
+		broadcast:  make(chan Message),
+		register:   make(chan Client),
+		unregister: make(chan Client),
+	}
+}
+
+func (m *Manager) Start(done chan struct{}) {
+	ticker := time.NewTicker(pingPeriod)
+
+	defer ticker.Stop()
 	defer m.CloseClients()
 	defer close(done)
 
@@ -70,10 +97,17 @@ func (m *Manager) Start(done chan struct{}) {
 
 			m.Desigate(message)
 
+		case <-ticker.C:
+			m.Ping()
+
 		case <-done:
 			break
 		}
 	}
+}
+
+func (m *Manager) Reciver(message Message) {
+	m.broadcast <- message
 }
 
 //CloseClients
@@ -109,13 +143,12 @@ func (m *Manager) Register(id string, c Client) error {
 	m.mux.Lock()
 
 	if _, exist := m.clients[id]; exist {
-
 		return errors.New("duplicate register")
 	}
+
 	m.clients[id] = c
 
 	m.mux.Unlock()
-
 	return nil
 }
 
@@ -124,4 +157,13 @@ func (m *Manager) UnRegister(id string) {
 	m.mux.Lock()
 	delete(m.clients, id)
 	m.mux.Unlock()
+}
+
+func (m *Manager) Ping() {
+
+	for _, c := range m.clients {
+		if err := c.Ping(); err != nil {
+			m.PingErrHandle(err)
+		}
+	}
 }

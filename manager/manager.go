@@ -43,6 +43,7 @@ type (
 	//Manager
 	Manager struct {
 		*ClientManager
+		Close bool
 	}
 
 	//ClientManager
@@ -67,7 +68,7 @@ func NewMessage(sender, recipient string, content []byte) Message {
 
 //NewManager
 func NewManager() *Manager {
-	return &Manager{NewClientManager()}
+	return &Manager{NewClientManager(), false}
 }
 
 //NewClientManager
@@ -101,18 +102,22 @@ func (m *Manager) Start(done chan struct{}) {
 			m.Ping()
 
 		case <-done:
-			break
+			return
 		}
 	}
 }
 
-func (m *Manager) Reciver(message Message) {
+func (m *Manager) Reciver(message Message) error {
+	if m.Close {
+		return errors.New("Closed channel")
+	}
 	m.broadcast <- message
+	return nil
 }
 
 //CloseClients
 func (m *Manager) CloseClients() {
-
+	m.Close = true
 	for k, _ := range m.clients {
 		m.clients[k].Close()
 	}

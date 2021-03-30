@@ -56,6 +56,7 @@ func hello(c echo.Context) error {
 	}
 
 	done <- struct{}{}
+
 	return nil
 }
 
@@ -66,7 +67,7 @@ func toClient(c echo.Context) error {
 
 	message := wsManager.NewMessage("server", "all", []byte(`{"Message":"server broadcast"}`))
 
-	Manager.Reciver(message)
+	fmt.Println(Manager.Reciver(message))
 	return c.JSON(http.StatusOK, "done")
 }
 
